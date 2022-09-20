@@ -7,7 +7,7 @@ from os import path
 try:
     import torch
 except ImportError:
-    raise Exception('batchot requires PyTorch to be installed. aborting')
+    raise Exception('groupmap requires PyTorch to be installed. aborting')
 
 here = path.abspath(path.dirname(__file__))
 
@@ -17,16 +17,16 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 # Proceed to setup
 setup(
-    name='batchot',
+    name='groupmap',
     version='0.1',
-    description='batch optimal transport module',
+    description='group optimal transport maping',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='Antoine Liutkus',
     author_email='antoine.liutkus@inria.fr',
-    packages=['batchot'],
-    keywords='batch ot',
+    packages=['groupmap'],
+    keywords='ot',
     install_requires=[
-        'torch>=1.8',
+        'torch>=1.11',
     ],
     )
