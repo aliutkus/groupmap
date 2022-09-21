@@ -3,6 +3,8 @@
 Define a `GroupMap` module, to apply an optimal transportation map over a multidimensional input. The objective is to transform the input to follow a prescribed arbitrary distribution, like uniform, Gaussian, sparse, etc. 
 
 > The main difference between `GroupMap` and normalization modules like `InstanceNorm`, `LayerNorm` or `GroupNorm` is it enforces the output to match _a whole distribution_ instead of just mean and variance.
+> :warning: In this simplified implementation, there is no tracking of the input statistics and the module always uses the batch statistics for mapping, both at training and test time. 
+
 
 Let $x$ be the input tensor, of arbitrary shape `(B, C, ...)` and let $x_{nc\boldsymbol{f}}$ be one of its entries for sample $n$, channel $c$ and a tuple of indices $\boldsymbol{f}$ corresponding to features. For instance, for images, we would have 2D features $\boldsymbol{f}=(i,j)$ for the row and column of a pixel. 
 
@@ -28,7 +30,7 @@ This formula corresponds to the classical _increasing rearrangement_ method to o
 * `num_groups`: number of groups to separate the channels into
 * `num_channels`: the number of channels expected in input, of shape (N, C, ...)
 * `target_quantiles`: the target quantiles function. must be a callable that takes a Tensor with entries between 0 and 1, and returns a Tensor with same shape.  
-Can notably be one of the provided `groupmap.gaussian` (default) `groupmap.uniform`, `groupmap.sparse`. 
+Can notably be one of the provided `groupmap.gaussian` (default) `groupmap.uniform`, `groupmap.sparse`.
 
 ## Shapes
 * Input: `(N, C ...)`

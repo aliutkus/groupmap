@@ -1,1 +1,1 @@
-from .interp1d import Interp1d
+from .groupmap import GroupMap, gaussian, uniform, sparse, cauchy
