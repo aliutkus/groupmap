@@ -115,6 +115,9 @@ groupmap with 2 groups (two consecutive rows together)
  
  ## Known issues: speed
  At this stage, the computational cost for `GroupMap` is mostly dominated by a call to `torch.argsorted`. Any ideas regarding how to make it faster are welcome.
+ > At this point, `GroupMap` is around 10 times slower than some `LayerNorm` or `InstanceNorm2d`. Memory usage should be ok.
+
+To improve speed, the number of groups can be increased, because sorting is then parallelized. Still, this may lead to difference performance, just like for `LayerNorm` vs `InstanceNorm2d`.
   
  ## Citation
  I don't have time to write a paper about GroupMap now. If you find this repository useful, please cite it this way:
