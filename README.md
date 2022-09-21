@@ -1,4 +1,4 @@
-# Group Map
+# Group Map: beyond mean and variance matching for deep learning
 
 Define a `GroupMap` module, to apply an optimal transportation map over a multidimensional input. The objective is to transform the input to follow a prescribed arbitrary distribution, like uniform, Gaussian, sparse, etc. 
 
