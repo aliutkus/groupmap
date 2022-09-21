@@ -33,10 +33,12 @@ This formula corresponds to the classical _increasing rearrangement_ method to o
 ## Interface
 
 This repository defines a `groupmap.GroupMap`, with the following parameters:
-* `num_groups`: number of groups to separate the channels into
+* `num_groups`: number of groups to separate the channels into.
 * `num_channels`: the number of channels expected in input, of shape (N, C, ...)
 * `target_quantiles`: the target quantiles function. must be a callable that takes a Tensor with entries between 0 and 1, and returns a Tensor with same shape.  
 You typically want to use the functions provided in this repo: `groupmap.gaussian` (default) `groupmap.uniform`, `groupmap.sparse`.
+
+For more insights on how `num_groups` and `num_channels` interact, please check the [documentation for `nn.GroupNorm`](https://pytorch.org/docs/stable/generated/torch.nn.GroupNorm.html): `GroupMap` purposefully uses the same syntax.
 
 ## Shapes
 * Input: `(N, C ...)`
@@ -56,7 +58,7 @@ print('original data')
 print(v[0].cpu().numpy())
 
 # groupmap with each row as a group (as in instancenorm)
-gm = GroupMap(
+gm = groupmap.GroupMap(
     num_groups=4,
     num_channels=4,
     target_quantiles=groupmap.uniform
@@ -66,7 +68,7 @@ print('\ngroupmap with each row as a group')
 print(gm(v)[0].cpu().numpy())
 
 # groupmap with all rows together (as in layernorm)
-gm = GroupMap(
+gm = groupmap.GroupMap(
     num_groups=1,
     num_channels=4,
     target_quantiles=groupmap.uniform
@@ -75,7 +77,7 @@ print('\ngroupmap with all rows together as a group')
 print(gm(v)[0].cpu().numpy())
 
 # groupmap with groups of 2 consecutive rows (as in groupnorm)
-gm = GroupMap(
+gm = groupmap.GroupMap(
     num_groups=2,
     num_channels=4,
     target_quantiles=groupmap.uniform
