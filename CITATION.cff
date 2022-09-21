@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Liutkus
+    given-names: Antoine
+    orcid: https://orcid.org/0000-0002-3458-6498
+title: "GroupMap: beyond mean and variance matching for deep learning"
+version: 1.0
+url: https://www.github.com/aliutkus/groupmap
+date-released: 2022-09-22
