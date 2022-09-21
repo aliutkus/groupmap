@@ -44,6 +44,11 @@ For more insights on how `num_groups` and `num_channels` interact, please check 
 * Input: `(N, C ...)`
 * Output: `(N, C, ...)` (same shape as input)
 
+## Installation
+1. Checkout this repository
+2. Go to the corresponding folder in terminal
+2. `pip install -e .`
+
 ## Example
 
 ```python
