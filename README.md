@@ -32,7 +32,7 @@ This formula corresponds to the classical _increasing rearrangement_ method to o
 
 ## Interface
 
-This repository defines a `groupmap.GroupMap`, with the following parameters:
+This repository defines a `groupmap.GroupMap`, that can basically be used as a drop-in replacement for `nn.GroupNorm` or `nn.InstanceNorm`, `nn.LayerNorm`, with the following parameters:
 * `num_groups`: number of groups to separate the channels into.
 * `num_channels`: the number of channels expected in input, of shape (N, C, ...)
 * `target_quantiles`: the target quantiles function. must be a callable that takes a Tensor with entries between 0 and 1, and returns a Tensor with same shape.  
@@ -113,6 +113,9 @@ groupmap with 2 groups (two consecutive rows together)
  [0.         0.85714287 1.         0.2857143 ]] 
  ```
  
+ ## Known issues: speed
+ At this stage, the computational cost for `GroupMap` is mostly dominated by a call to `torch.argsorted`. Any ideas regarding how to make it faster are welcome.
+  
  ## Citation
  I don't have time to write a paper about GroupMap now. If you find this repository useful, please cite it this way:
  ```
