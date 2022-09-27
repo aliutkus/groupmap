@@ -15,7 +15,7 @@ Let $x$ be the input tensor, of arbitrary shape `(B, C, ...)` and let $x_{nc\bol
 
 For each element of the input tensor, the following transformation is applied:
 
-$y_{nc\boldsymbol{f}}=\mathit{Q}\left(\mathcal{F}_{nc}\left(x_{nc\boldsymbol{f}}\right)\right) * \gamma_{c\boldsymbol{f}} + \beta_{c\boldsymbol{f}}$
+$y_{nc\boldsymbol{f}}=Q\left(F_{nc}\left(x_{nc\boldsymbol{f}}\right)\right) * \gamma_{c\boldsymbol{f}} + \beta_{c\boldsymbol{f}}$
 
 Where:  
 * $\forall q\in[0, 1],~Q(q)\in\mathbb{R}$ is the target _quantile function_. It describes what the distribution of the output should be and is provided by the user. The `GroupMap` module guarantees that the output will have a distribution that matches this target.
@@ -26,7 +26,7 @@ Where:
    * It can be the cdf for just a particular channel $x_{nc}$, then behaving like some optimal-transport version of `InstanceNorm`.
    * It can be computed and shared over all channels of sample $x_n$  (as in `LayerNorm`)
    * It can be computed and shared over groups of channels (as in `GroupNorm`).
-    > $\mathcal{F}_{nc}(v)=0$ if $v$ is the minimum of the input distribution, $0.5$ for the median, $1$ for the maximum, etc.).  
+    > $F_{nc}(v)=0$ if $v$ is the minimum of the input distribution, $0.5$ for the median, $1$ for the maximum, etc.).  
 * $\gamma_{c\boldsymbol{f}}$ and $\beta_{c\boldsymbol{f}}$ are parameters for an affine transform that may or may not be activated. If it is activated, it matches classical behaviour, i.e. we have $\gamma_{c\boldsymbol{f}}=\gamma_{c}$ and $\beta_{c\boldsymbol{f}}=\beta_{c}$ for `InstanceMap` and `GroupMap`, while elementwise parameters for `LayerMap`.
 
 This formula corresponds to the classical _increasing rearrangement_ method to optimally transport scalar input data distributed wrt a distribution to another scalar distribution, by mapping quantile to quantile (min to min, median to median, max to max, etc.)  
