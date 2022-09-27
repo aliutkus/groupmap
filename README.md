@@ -1,8 +1,9 @@
 # Group Map: beyond mean and variance matching for deep learning
 
-Define a `GroupMap` module, to apply an optimal transportation map over a multidimensional input. The objective is to transform the input to follow a prescribed arbitrary distribution at the output, like uniform, Gaussian, sparse, etc. 
+Define `GroupMap`, `InstanceMap`, `LayerMap` modules, to transform the input so that it follows a prescribed arbitrary distribution, like uniform, Gaussian, sparse, etc. 
 
-> The main difference between `GroupMap` and normalization modules like `InstanceNorm`, `LayerNorm` or `GroupNorm` is it enforces the output to match _a whole distribution_ instead of just mean and variance.
+> The main difference between the `GroupMap`, `InstanceMap` and `LayerMap` modules and their normalization-based counterparts `GroupNorm`, `InstanceNorm` and `LayerNorm` is they enforces the output to match _a whole distribution_ instead of just mean and variance.
+> :warning: In this simplified implementation, there is no tracking of the input statistics and the module always uses the batch statistics for mapping, both at training and test time. 
 
 <img src="groupmap.jpg" width="500">
 
@@ -14,7 +15,7 @@ Let $x$ be the input tensor, of arbitrary shape `(B, C, ...)` and let $x_{nc\bol
 
 For each element of the input tensor, the following transformation is applied:
 
-$y_{nc\boldsymbol{f}}=Q\left(F_{nc}\left(x_{nc\boldsymbol{f}}\right)\right)$
+$y_{nc\boldsymbol{f}}=\mathit{Q}\left(\mathcal{F}_{nc}\left(x_{nc\boldsymbol{f}}\right)\right) * \gamma_{c\boldsymbol{f}} + \beta_{c\boldsymbol{f}}$
 
 Where:  
 * $\forall q\in[0, 1],~Q(q)\in\mathbb{R}$ is the target _quantile function_. It describes what the distribution of the output should be and is provided by the user. The `GroupMap` module guarantees that the output will have a distribution that matches this target.
@@ -25,113 +26,49 @@ Where:
    * It can be the cdf for just a particular channel $x_{nc}$, then behaving like some optimal-transport version of `InstanceNorm`.
    * It can be computed and shared over all channels of sample $x_n$  (as in `LayerNorm`)
    * It can be computed and shared over groups of channels (as in `GroupNorm`).
-    > $F_{nc}(v)=0$ if $v$ is the minimum of the input distribution, $0.5$ for the median, $1$ for the maximum, etc.).  
-
+    > $\mathcal{F}_{nc}(v)=0$ if $v$ is the minimum of the input distribution, $0.5$ for the median, $1$ for the maximum, etc.).  
+* $\gamma_{c\boldsymbol{f}}$ and $\beta_{c\boldsymbol{f}}$ are parameters for an affine transform that may or may not be activated. If it is activated, it matches classical behaviour, i.e. we have $\gamma_{c\boldsymbol{f}}=\gamma_{c}$ and $\beta_{c\boldsymbol{f}}=\beta_{c}$ for `InstanceMap` and `GroupMap`, while elementwise parameters for `LayerMap`.
 
 This formula corresponds to the classical _increasing rearrangement_ method to optimally transport scalar input data distributed wrt a distribution to another scalar distribution, by mapping quantile to quantile (min to min, median to median, max to max, etc.)  
 
-## Interface
+## Usage
 
-This repository defines a `groupmap.GroupMap`, that can basically be used as a drop-in replacement for `nn.GroupNorm` or `nn.InstanceNorm`, `nn.LayerNorm`, with the following parameters:
-* `num_groups`: number of groups to separate the channels into.
+### Specifics
+
+The usage of the modules offered by `groupmap` purposefully matches that of classical normalization modules, so that they may be used as a drop-in replacement. There are two main subtleties with respect to the normalization-based ones.
+
+
+**target quantiles**. All modules offer a `target_quantiles` parameter, which must be a callable taking a `Tensor` of numbers betweer 0 and 1 as inputs, and returning a `Tensor` of same shape as output with the corresponding quantiles for the target distribution.  
+
+> The Module offers several default target quantiles functions:
+>* `groupmap.uniform`: defines the uniform distribution as $Q(q)=q$ 
+>* `groupmap.gaussian`: defines the Gaussian distribution as: $Q(q) = \sqrt{2}\text{erf}^{-1}(2q-1)$
+    (also known as the probit function).
+>* `groupmap.cauchy`: defines the Cauchy distribution as 
+    $Q(q)=\tan(\pi(q-1/2))$.
+
+Below is a quick description of the interface for quick reference. For a detailed description of the parameters to `GroupMap`, `LayerMap` and `InstanceMap`, please check the documentation for [`GroupNorm`](https://pytorch.org/docs/stable/generated/torch.nn.GroupNorm.html), [`LayerNorm`](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) and [`InstanceNorm`](https://pytorch.org/docs/stable/generated/torch.nn.InstanceNorm2d.html), respectively.
+
+**eps**. Instead of being a constant added to a denominator to avoid a division by zero as in $\star\text{Norm}$ modules, `eps` serves as the standard deviation for an actual random Gaussian noise that is added to the input. The consequence of doing so is to avoid duplicate values in the input, so that computation of the input CDF is well behaved. However, having a value $\epsilon\neq 0$ is not mandatory in mapping-based transformations.
+> :warning: all modules have `eps=0` by default.
+
+### `GroupMap`
+> input distribution is computed on groups of channels.
+* `num_groups`: number of groups to separate the channels into
 * `num_channels`: the number of channels expected in input, of shape (N, C, ...)
-* `target_quantiles`: the target quantiles function. must be a callable that takes a Tensor with entries between 0 and 1, and returns a Tensor with same shape.  
-You typically want to use the functions provided in this repo: `groupmap.gaussian` (default) `groupmap.uniform`, `groupmap.sparse`.
+* `target_quantiles` as detailed above. default is `groupmap.gaussian`.
+* `eps`: as detailed above
 
-For more insights on how `num_groups` and `num_channels` interact, please check the [documentation for `nn.GroupNorm`](https://pytorch.org/docs/stable/generated/torch.nn.GroupNorm.html): `GroupMap` purposefully uses the same syntax.
+### `LayerMap`
+> input distribution is computed over each whole sample.
+* `normalized_shape`: shape of each sample
+* `elementwise_affine`: whether or not to activate elementwise affine transformation of the output. If so, `weight` and `bias` parameters are created with shape `normalized_shape`.
+* `target_quantiles` as detailed above. default is `groupmap.gaussian`.
 
-## Shapes
-* Input: `(N, C ...)`
-* Output: `(N, C, ...)` (same shape as input)
-
-## Installation
-1. Checkout this repository
-2. Go to the corresponding folder in terminal
-2. `pip install -e .`
-
-## Example
-
-```python
-# import
-import torch
-from torch import nn
-import groupmap
-
-# create a dummy tensor with 4 channels and 4 features
-v = torch.randn(1, 4, 4).to(device)
-print('original data')
-print(v[0].cpu().numpy())
-
-# groupmap with each row as a group (as in instancenorm)
-gm = groupmap.GroupMap(
-    num_groups=4,
-    num_channels=4,
-    target_quantiles=groupmap.uniform
-).to(device)
-
-print('\ngroupmap with each row as a group')
-print(gm(v)[0].cpu().numpy())
-
-# groupmap with all rows together (as in layernorm)
-gm = groupmap.GroupMap(
-    num_groups=1,
-    num_channels=4,
-    target_quantiles=groupmap.uniform
-).to(device)
-print('\ngroupmap with all rows together as a group')
-print(gm(v)[0].cpu().numpy())
-
-# groupmap with groups of 2 consecutive rows (as in groupnorm)
-gm = groupmap.GroupMap(
-    num_groups=2,
-    num_channels=4,
-    target_quantiles=groupmap.uniform
-).to(device)
-print('\ngroupmap with 2 groups (two consecutive rows together)')
-print(gm(v)[0].cpu().numpy())
-```
-
-This outputs:
-```
-original data
-[[ 2.2675493  -0.5355932  -0.9594439  -0.526434  ]
- [-0.56300575  0.45603803 -0.23818    -0.2557832 ]
- [-0.8675442  -0.9519985  -1.6582233  -0.3447896 ]
- [-2.7685483   1.2761954   1.6266245  -1.3452631 ]]
-
-groupmap with each row as a group
-[[1.         0.33333334 0.         0.6666666 ]
- [0.         1.         0.6666666  0.33333334]
- [0.6666666  0.33333334 0.         1.        ]
- [0.         0.6666666  1.         0.33333334]]
-
-groupmap with all rows together as a group
-[[1.         0.4666667  0.20000002 0.5333333 ]
- [0.40000004 0.8        0.73333335 0.6666666 ]
- [0.33333334 0.26666668 0.06666667 0.59999996]
- [0.         0.8666667  0.93333334 0.13333334]]
-
-groupmap with 2 groups (two consecutive rows together)
-[[1.         0.2857143  0.         0.42857146]
- [0.14285715 0.85714287 0.71428573 0.57142854]
- [0.57142854 0.42857146 0.14285715 0.71428573]
- [0.         0.85714287 1.         0.2857143 ]] 
- ```
- 
- ## Known issues: speed
- At this stage, the computational cost for `GroupMap` is mostly dominated by a call to `torch.argsorted`. Any ideas regarding how to make it faster are welcome.
- > At this point, `GroupMap` is around 10 times slower than some `LayerNorm` or `InstanceNorm2d`. Memory usage should be ok.
-
-To improve speed, the number of groups can be increased, because sorting is then parallelized. Still, this may lead to difference performance, just like for `LayerNorm` vs `InstanceNorm2d`.
-  
- ## Citation
- I don't have time to write a paper about GroupMap now. If you find this repository useful, please cite it this way:
- ```
- @software{Liutkus_GroupMap_beyond_mean_2022,
-    author = {Liutkus, Antoine},
-    month = {9},
-    title = {{GroupMap: beyond mean and variance matching for deep learning}},
-    url = {https://www.github.com/aliutkus/groupmap},
-    year = {2022}
-}
- ```
+### `InstanceMap`
+> Input distribution is computed over each channel separately
+* `num_features`: number of channels `C` for an input of shape `(N, C, ...)
+* `affine`: whether or not to apply a channelwise affine transform.
+* `track_running_stats`, `momentum`: in this implementation, these parameters are ignored. Statistics are computed from the input signal *anyways*, both at training and test times.
+* `target_quantiles`: as detailed above. default is `groupmap.gaussian`.
+* `eps`: as detailed above.

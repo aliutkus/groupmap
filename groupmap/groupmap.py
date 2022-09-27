@@ -24,7 +24,7 @@ def cauchy(quantiles):
     return torch.tan(torch.tensor(math.pi)*(quantiles-0.5))
 
 
-class GroupMap(nn.Module):
+class Map(nn.Module):
     r"""Applies an optimal transportation plan over a multidimensional input. For each element
     of the input tensor, the following transformation is applied
 
@@ -59,7 +59,6 @@ class GroupMap(nn.Module):
         - Output: :math:`(N, C, ...)` (same shape as input)
 
     """
-
     def __init__(
         self,
         num_groups:1,
@@ -69,8 +68,9 @@ class GroupMap(nn.Module):
         device=None,
         dtype=None,
     ):
-        super(GroupMap, self).__init__()
-        assert not (num_channels % num_groups), 'The number of channels must be divisible by the number of groups.'
+        super(Map, self).__init__()
+        if num_groups > 1:
+            assert not (num_channels % num_groups), 'If `num_groups>1`, then the number of channels must be divisible by the number of groups.'
 
         # save parameters
         self.num_groups = num_groups
@@ -86,7 +86,7 @@ class GroupMap(nn.Module):
 
     def forward(self, x):
         """
-        Applies group optimal transport maps
+        Applies optimal transport maps
 
         Args:
             x : (batch_size, num_channels, ...)
@@ -126,3 +126,111 @@ class GroupMap(nn.Module):
         y = y.view(*input_shape)
 
         return y
+
+class Affine(nn.Module):
+    """
+    Affine transformation module.
+
+    For input of arbitrary shape (N, ...), first view it as (N,) + affine_shape  + (-1).
+    Then applies an affine transformation
+    $y_{ni} = x_{ni}*\gamma_{ni}[None]+\beta_{ni}[None]$.
+    before getting back to the original shape.
+
+    Several cases of interest:
+    * `affine_shape` is (num_channels,): 
+        corresponds to the behaviour of `InstanceNorm`, which applies the same weight-bias to
+        all entries of a given channel
+    * Input has shape `(N,)+affine_shape` exactly:
+        corresponds to the behaviour of `LayerNorm`, which applies different weight-bias to each
+        each entry of the input after normalization.
+ 
+
+    The gain and bias parameters have shape `((num_channels,) + affine_shape`
+    """
+    def __init__(self, affine_shape, device=None, dtype=None):
+        super(Affine, self).__init__()
+        self.affine_shape = affine_shape
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        self.weight = nn.Parameter(torch.ones(self.affine_shape, **factory_kwargs))
+        self.bias = nn.Parameter(torch.zeros(self.affine_shape, **factory_kwargs))
+
+    def forward(self, x):
+        original_shape = x.shape
+        batchsize = original_shape[0]
+        x = x.view(batchsize, *self.affine_shape, -1)
+        x = x * self.weight[..., None] + self.bias[..., None]
+        x = x.view(*original_shape)
+        return x
+
+
+class GroupMap(nn.Module):
+    """Wrapper for a mapping equivalent of GroupNorm"""
+    def __init__(self, num_groups, num_channels, eps=0, affine=True, target_quantiles=gaussian, device=None, dtype=None):
+        super(GroupMap, self).__init__()
+        self.mapper = Map(
+            num_groups=num_groups,
+            num_channels=num_channels,
+            eps=eps,
+            device=device,
+            dtype=dtype,
+            target_quantiles=target_quantiles
+        )
+        if affine:
+            self.affine = Affine(affine_shape=(num_channels,), device=device, dtype=dtype)
+        else:
+            self.affine = None
+
+    def forward(self, x):
+        x = self.mapper(x)
+        if self.affine:
+            x = self.affine(x)
+        return x
+
+class LayerMap(nn.Module):
+    """Wrapper for a mapping equivalent of LayerNorm"""
+    def __init__(self, normalized_shape, eps=0, elementwise_affine=True, target_quantiles=gaussian, device=None, dtype=None):
+        super(LayerMap, self).__init__()
+        self.mapper = Map(
+            num_groups=1,
+            num_channels=None,
+            eps=eps,
+            device=device,
+            dtype=dtype,
+            target_quantiles=target_quantiles
+        )
+        if elementwise_affine:
+            self.affine = Affine(affine_shape=normalized_shape, device=device, dtype=dtype)
+        else:
+            self.affine = None
+
+    def forward(self, x):
+        x = self.mapper(x)
+        if self.affine:
+            x = self.affine(x)
+        return x
+
+class InstanceMap(nn.Module):
+    """Wrapper for a mapping equivalent of InstanceNorm. Doesn't make a difference if the input is of any dimension"""
+    def __init__(self, num_features, eps=0, momentum=0.1, affine=False, track_running_stats=False, target_quantiles=gaussian, device=None, dtype=None):
+        super(InstanceMap, self).__init__()
+        self.mapper = Map(
+            num_groups=num_features,
+            num_channels=num_features,
+            eps=eps,
+            device=device,
+            dtype=dtype,
+            target_quantiles=target_quantiles
+        )
+        if affine:
+            self.affine = Affine(affine_shape=(num_features,), device=device, dtype=dtype)
+        if track_running_stats:
+            warnings.warn('`track_running_stats` has been set for `InstanceMap`, but the feature is not implemented. Ignoring this and using input statistics in all cases.')
+
+    def forward(self, x):
+        x = self.mapper(x)
+        if self.affine:
+            x = self.affine(x)
+        return x
+
+
+InstanceMap2d = InstanceMap
